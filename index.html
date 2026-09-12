@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurora Merge</title>
+<style>
+  :root{
+    --bg-0:#0a0d16;
+    --bg-1:#0f1424;
+    --text-0:#f2f4fb;
+    --text-1:#aab0c6;
+    --text-2:#6f7690;
+    --accent-a:#7c6cff;
+    --accent-b:#20d9c4;
+    --danger:#ff5b6e;
+    --amber:#ffb86b;
+    --go:#3ddc84;
+    --go-dark:#22a45c;
+    --font-ui:"Inter","Segoe UI",system-ui,sans-serif;
+    --font-display:"Space Grotesk","Inter",sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:
+      radial-gradient(1100px 700px at 12% 8%, rgba(124,108,255,0.22), transparent 60%),
+      radial-gradient(900px 650px at 88% 82%, rgba(32,217,196,0.18), transparent 60%),
+      linear-gradient(160deg, var(--bg-1) 0%, var(--bg-0) 55%, #060811 100%);
+    color:var(--text-0);
+    font-family:var(--font-ui);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:100%;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+    user-select:none;
+  }
+
+  #arena{
+    position:relative;
+    width:min(96vw, 460px);
+    aspect-ratio: 9/16;
+    max-height:94vh;
+    border-radius:22px;
+    overflow:hidden;
+    background:#060811;
+    border:1px solid rgba(255,255,255,0.12);
+    box-shadow:0 40px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- Game screen ---------- */
+  #game-screen{ display:none; flex-direction:column; height:100%; padding:16px; }
+  #game-screen.active{ display:flex; }
+
+  .top-bar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .g-logo{ font-family:var(--font-display); font-size:19px; font-weight:700;
+    background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .top-actions{ display:flex; gap:8px; }
+  .icon-sm{
+    width:34px; height:34px; border-radius:10px;
+    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14);
+    display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer;
+  }
+  .icon-sm:hover{ background:rgba(255,255,255,0.14); }
+
+  .score-bar{ display:flex; gap:8px; margin-bottom:14px; }
+  .score-box{
+    flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+    border-radius:12px; padding:8px 12px; text-align:center;
+  }
+  .score-box .lbl{ font-size:9px; color:var(--text-2); letter-spacing:.5px; }
+  .score-box .val{ font-family:var(--font-display); font-size:19px; font-weight:700; }
+
+  #board-wrap{ flex:1; display:flex; align-items:center; justify-content:center; }
+  #board{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    max-width:380px;
+    background:rgba(255,255,255,0.04);
+    border-radius:16px;
+    padding:8px;
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    grid-template-rows:repeat(4,1fr);
+    gap:8px;
+  }
+  .cell-bg{ background:rgba(255,255,255,0.04); border-radius:10px; }
+  .tile{
+    position:absolute;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:10px;
+    font-family:var(--font-display);
+    font-weight:700;
+    color:#fff;
+    transition: left .09s ease, top .09s ease, transform .1s ease, opacity .1s ease;
+    box-shadow:0 4px 12px rgba(0,0,0,0.25);
+  }
+  .tile.spawn{ animation:spawnIn .15s ease; }
+  .tile.merged{ animation:mergePop .16s ease; }
+  @keyframes spawnIn{ from{ transform:scale(0.4); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  @keyframes mergePop{ 0%{ transform:scale(1); } 45%{ transform:scale(1.15); } 100%{ transform:scale(1); } }
+
+  .swipe-hint{ text-align:center; font-size:10.5px; color:var(--text-2); margin-top:12px; }
+
+  /* ---------- Overlay / menu screens (shared style) ---------- */
+  #overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(6,8,17,0.86);
+    backdrop-filter:blur(8px);
+    text-align:center;
+    z-index:10;
+    padding:24px;
+    overflow-y:auto;
+  }
+  #overlay.hidden{ display:none; }
+  .screen{ display:none; flex-direction:column; align-items:center; width:100%; gap:14px; }
+  .screen.active{ display:flex; }
+
+  .logo-wrap{ display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:4px; }
+  .logo{
+    font-family:var(--font-display);
+    font-size:34px; font-weight:700;
+    background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    letter-spacing:-1px;
+  }
+  .tagline{ font-size:11.5px; color:var(--text-2); letter-spacing:.5px; }
+
+  .tile-preview-box{
+    width:96px; height:96px;
+    display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:6px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:18px;
+    padding:8px;
+  }
+  .tile-preview-box .pv-tile{
+    border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:13px; color:#fff;
+  }
+
+  .coin-pill{
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,184,107,0.12);
+    border:1px solid rgba(255,184,107,0.3);
+    color:var(--amber);
+    font-family:var(--font-display);
+    font-size:13px; font-weight:600;
+    padding:6px 14px; border-radius:20px;
+  }
+
+  .btn{
+    font-family:var(--font-ui); font-weight:700; font-size:15px;
+    padding:15px 38px; border-radius:16px; border:none; cursor:pointer;
+    color:#04140a;
+    background:linear-gradient(135deg,var(--go),var(--go-dark));
+    box-shadow:0 12px 28px rgba(61,220,132,0.35), inset 0 1px 0 rgba(255,255,255,0.3);
+    transition:transform .1s ease, filter .1s ease;
+    letter-spacing:.3px;
+  }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:active{ transform:scale(0.96); }
+
+  .btn-secondary{
+    font-family:var(--font-ui); font-weight:600; font-size:13px; color:var(--text-0);
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14);
+    padding:10px 18px; border-radius:12px; cursor:pointer;
+  }
+  .btn-secondary:hover{ background:rgba(255,255,255,0.12); }
+  .btn-secondary:active{ transform:scale(0.96); }
+
+  .icon-row{ display:flex; gap:10px; margin-top:4px; }
+  .icon-btn{
+    width:52px; height:52px; border-radius:14px;
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; cursor:pointer; color:var(--text-0); position:relative;
+  }
+  .icon-btn:hover{ background:rgba(255,255,255,0.11); }
+  .icon-btn span.icon-label{
+    position:absolute; bottom:-16px; font-size:8.5px; color:var(--text-2); letter-spacing:.3px; white-space:nowrap;
+  }
+
+  .panel-title{ font-family:var(--font-display); font-size:20px; font-weight:600; margin:0; }
+  .panel-scroll{ width:100%; max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:2px 2px 4px; }
+
+  .setting-row{
+    width:100%; max-width:320px; display:flex; align-items:center; justify-content:space-between;
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09);
+    border-radius:14px; padding:14px 16px;
+  }
+  .setting-label{ display:flex; align-items:center; gap:10px; font-size:13px; }
+  .toggle{ width:42px; height:24px; border-radius:14px; background:rgba(255,255,255,0.14); position:relative; cursor:pointer; flex-shrink:0; }
+  .toggle.on{ background:linear-gradient(135deg,var(--accent-a),var(--accent-b)); }
+  .toggle::after{ content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .15s ease; }
+  .toggle.on::after{ transform:translateX(18px); }
+  .vol-slider{ width:100%; -webkit-appearance:none; height:4px; border-radius:2px; background:rgba(255,255,255,0.14); outline:none; margin-top:10px; }
+  .vol-slider::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; cursor:pointer; box-shadow:0 0 0 3px rgba(124,108,255,0.5); }
+
+  .theme-card{
+    width:100%; max-width:340px; display:flex; align-items:center; gap:14px;
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09);
+    border-radius:16px; padding:12px 14px; text-align:left; cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .theme-card.selected{ border-color:var(--accent-b); background:rgba(32,217,196,0.08); }
+  .theme-swatch-box{
+    width:52px; height:52px; border-radius:12px; flex-shrink:0;
+    display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:3px; padding:4px;
+    background:rgba(255,255,255,0.05);
+  }
+  .theme-swatch-box div{ border-radius:4px; }
+  .theme-info{ flex:1; }
+  .theme-name{ font-size:13.5px; font-weight:600; }
+  .theme-desc{ font-size:10px; color:var(--text-2); margin-top:2px; }
+  .theme-action{ font-family:var(--font-display); font-size:11px; font-weight:700; padding:8px 14px; border-radius:10px; white-space:nowrap; }
+  .theme-action.owned{ background:rgba(61,220,132,0.15); color:var(--go); }
+  .theme-action.buy{ background:linear-gradient(135deg,var(--amber),#ff9d4d); color:#2a1400; cursor:pointer; }
+  .theme-action.equipped{ background:rgba(124,108,255,0.2); color:#cfc9ff; }
+
+  .score-row{
+    width:100%; max-width:320px; display:flex; align-items:center; gap:12px;
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09);
+    border-radius:12px; padding:11px 14px;
+  }
+  .score-rank{ font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--text-2); width:22px; }
+  .score-rank.top1{ color:var(--amber); }
+  .score-info{ flex:1; text-align:left; }
+  .score-val{ font-family:var(--font-display); font-size:15px; font-weight:600; }
+  .score-meta{ font-size:10px; color:var(--text-2); }
+  .empty-state{ color:var(--text-2); font-size:12.5px; padding:20px 0; }
+
+  .score-big{ font-family:var(--font-display); font-size:46px; font-weight:700; margin:0; }
+  .score-sub{ font-size:11px; color:var(--text-1); }
+  .coins-earned{ font-size:12.5px; color:var(--amber); font-weight:600; }
+  .controls-hint{ display:flex; gap:10px; margin-top:2px; flex-wrap:wrap; justify-content:center; }
+  .hint-chip{
+    font-size:10px; color:var(--text-1); background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.1); padding:5px 10px; border-radius:20px;
+  }
+</style>
+</head>
+<body>
+
+<div id="arena">
+
+  <!-- ============ GAME SCREEN ============ -->
+  <div id="game-screen">
+    <div class="top-bar">
+      <div class="g-logo">AURORA MERGE</div>
+      <div class="top-actions">
+        <div class="icon-sm" id="restart-btn" title="Restart">↺</div>
+        <div class="icon-sm" id="menu-btn-ingame" title="Menu">☰</div>
+      </div>
+    </div>
+    <div class="score-bar">
+      <div class="score-box"><div class="lbl">SCORE</div><div class="val" id="cur-score">0</div></div>
+      <div class="score-box"><div class="lbl">BEST</div><div class="val" id="best-score">0</div></div>
+    </div>
+    <div id="board-wrap">
+      <div id="board"></div>
+    </div>
+    <div class="swipe-hint">Swipe or use arrow keys / WASD to merge tiles</div>
+  </div>
+
+  <!-- ============ OVERLAY / MENUS ============ -->
+  <div id="overlay">
+
+    <!-- HOME -->
+    <div class="screen active" id="screen-home">
+      <div class="logo-wrap">
+        <div class="logo">AURORA MERGE</div>
+        <div class="tagline">SLIDE · COMBINE · CHASE 2048</div>
+      </div>
+      <div class="tile-preview-box" id="tile-preview"></div>
+      <div class="coin-pill">🪙 <span id="coin-count">0</span></div>
+      <button class="btn" id="play-btn">▶ PLAY</button>
+      <div class="icon-row">
+        <div class="icon-btn" id="open-settings">⚙️<span class="icon-label">SOUND</span></div>
+        <div class="icon-btn" id="open-shop">🎨<span class="icon-label">THEMES</span></div>
+        <div class="icon-btn" id="open-scores">🏆<span class="icon-label">SCORES</span></div>
+      </div>
+      <div class="controls-hint" style="margin-top:6px;">
+        <div class="hint-chip">⬅️➡️⬆️⬇️ / WASD — slide</div>
+        <div class="hint-chip">📱 swipe on mobile</div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" id="screen-settings">
+      <div class="panel-title">Settings</div>
+      <div class="setting-row">
+        <div class="setting-label">🔊
+          <div>
+            <div>Sound effects</div>
+          </div>
+        </div>
+        <div class="toggle on" id="toggle-sound"></div>
+      </div>
+      <div class="setting-row" style="flex-direction:column; align-items:stretch; gap:2px;">
+        <div class="setting-label">🎚️ <div>Volume</div></div>
+        <input type="range" class="vol-slider" id="vol-slider" min="0" max="100" value="70">
+      </div>
+      <button class="btn-secondary" id="back-from-settings">← Back</button>
+    </div>
+
+    <!-- THEMES SHOP -->
+    <div class="screen" id="screen-shop">
+      <div class="panel-title">Tile Themes</div>
+      <div class="coin-pill" id="shop-coin-pill">🪙 <span id="coin-count-2">0</span></div>
+      <div class="panel-scroll" id="theme-list"></div>
+      <button class="btn-secondary" id="back-from-shop">← Back</button>
+    </div>
+
+    <!-- SCORES -->
+    <div class="screen" id="screen-scores">
+      <div class="panel-title">Top Runs</div>
+      <div class="panel-scroll" id="scores-list"></div>
+      <button class="btn-secondary" id="back-from-scores">← Back</button>
+    </div>
+
+    <!-- GAME OVER -->
+    <div class="screen" id="screen-over">
+      <div class="tagline" id="over-title">NO MORE MOVES</div>
+      <div class="score-big" id="over-score">0</div>
+      <div class="score-sub" id="over-best">Best: 0</div>
+      <div class="coins-earned" id="over-coins">+0 coins earned</div>
+      <button class="btn" id="retry-btn">▶ PLAY AGAIN</button>
+      <button class="btn-secondary" id="menu-btn">Main Menu</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   THEMES
+============================================================ */
+const THEMES = [
+  { id:'aurora', name:'Aurora', cost:0, desc:'Signature purple-teal glow',
+    colors:{2:'#2a2f45',4:'#343a58',8:'#4a4ecf',16:'#5e5ce8',32:'#7c6cff',64:'#9b6cff',128:'#20d9c4',256:'#1ec2b8',512:'#ffb86b',1024:'#ff9d4d',2048:'#3ddc84'} },
+  { id:'sunset', name:'Sunset', cost:150, desc:'Warm amber-to-crimson gradient tiles',
+    colors:{2:'#3a2a2f',4:'#4a3038',8:'#c9536b',16:'#e05a6e',32:'#ff6b6b',64:'#ff8c5b',128:'#ffb86b',256:'#ffd166',512:'#ff5b6e',1024:'#e0435a',2048:'#ff3d5e'} },
+  { id:'glacier', name:'Glacier', cost:220, desc:'Cool icy blues and whites',
+    colors:{2:'#1e2a3a',4:'#25344a',8:'#3a6ea8',16:'#4a8fd1',32:'#5eb8e8',64:'#7cd4ec',128:'#9be8f0',256:'#c2f5f5',512:'#e8fbfb',1024:'#3ddc84',2048:'#20d9c4'} },
+  { id:'mono', name:'Obsidian', cost:320, desc:'Sleek monochrome with a gold finish',
+    colors:{2:'#26282f',4:'#33353d',8:'#41434c',16:'#53555f',32:'#666873',64:'#7a7c88',128:'#8f919d',256:'#a5a7b3',512:'#ffd166',1024:'#ffb86b',2048:'#ffe08a'} },
+];
+
+let coins = 0;
+let ownedThemes = ['aurora'];
+let selectedThemeId = 'aurora';
+let highScores = [];
+let soundOn = true;
+let volume = 0.7;
+let bestScore = 0;
+
+function getTheme(){ return THEMES.find(t => t.id === selectedThemeId); }
+function tileColor(val){
+  const th = getTheme();
+  return th.colors[val] || th.colors[2048] || '#3ddc84';
+}
+function tileTextColor(val){
+  return val <= 4 ? '#dfe2f0' : '#ffffff';
+}
+
+/* ============================================================
+   AUDIO
+============================================================ */
+let actx = null;
+function ensureAudio(){ if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+function beep(freq, dur, type='sine', gainVal=0.16){
+  if(!soundOn || !actx) return;
+  const osc = actx.createOscillator();
+  const gain = actx.createGain();
+  osc.type = type; osc.frequency.value = freq;
+  gain.gain.value = gainVal * volume;
+  osc.connect(gain); gain.connect(actx.destination);
+  osc.start();
+  gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+  osc.stop(actx.currentTime + dur);
+}
+function sfxMove(){ beep(300, 0.06, 'sine', 0.08); }
+function sfxMerge(val){ beep(400 + Math.log2(val)*60, 0.12, 'triangle', 0.16); }
+function sfxWin(){ beep(1200,0.2,'sine',0.2); setTimeout(()=>beep(1600,0.25,'sine',0.2),120); }
+function sfxLose(){ beep(160,0.4,'sawtooth',0.22); }
+function sfxCoin(){ beep(1500,0.1,'sine',0.14); }
+
+/* ============================================================
+   NAVIGATION
+============================================================ */
+const overlay = document.getElementById('overlay');
+const gameScreen = document.getElementById('game-screen');
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  overlay.classList.remove('hidden');
+}
+function refreshCoinDisplays(){
+  document.getElementById('coin-count').textContent = coins;
+  document.getElementById('coin-count-2').textContent = coins;
+}
+
+document.getElementById('open-settings').onclick = () => showScreen('screen-settings');
+document.getElementById('back-from-settings').onclick = () => showScreen('screen-home');
+document.getElementById('open-shop').onclick = () => { renderShop(); showScreen('screen-shop'); };
+document.getElementById('back-from-shop').onclick = () => showScreen('screen-home');
+document.getElementById('open-scores').onclick = () => { renderScores(); showScreen('screen-scores'); };
+document.getElementById('back-from-scores').onclick = () => showScreen('screen-home');
+document.getElementById('menu-btn').onclick = goToMenu;
+document.getElementById('menu-btn-ingame').onclick = goToMenu;
+document.getElementById('restart-btn').onclick = () => { ensureAudio(); newGame(); };
+
+function goToMenu(){
+  gameScreen.classList.remove('active');
+  drawTilePreview();
+  showScreen('screen-home');
+}
+
+document.getElementById('toggle-sound').onclick = function(){
+  soundOn = !soundOn;
+  this.classList.toggle('on', soundOn);
+  ensureAudio(); if(soundOn) beep(700,0.06,'sine',0.12);
+};
+document.getElementById('vol-slider').addEventListener('input', function(){ volume = this.value/100; });
+
+/* ============================================================
+   THEME SHOP
+============================================================ */
+function renderShop(){
+  refreshCoinDisplays();
+  const list = document.getElementById('theme-list');
+  list.innerHTML = '';
+  THEMES.forEach(t => {
+    const owned = ownedThemes.includes(t.id);
+    const equipped = selectedThemeId === t.id;
+    const card = document.createElement('div');
+    card.className = 'theme-card' + (equipped ? ' selected' : '');
+    const swatchVals = [8,32,128,512];
+    card.innerHTML = `
+      <div class="theme-swatch-box">
+        ${swatchVals.map(v => `<div style="background:${t.colors[v]}"></div>`).join('')}
+      </div>
+      <div class="theme-info">
+        <div class="theme-name">${t.name}</div>
+        <div class="theme-desc">${t.desc}</div>
+      </div>
+      <div class="theme-action ${equipped ? 'equipped' : owned ? 'owned' : 'buy'}">
+        ${equipped ? 'EQUIPPED' : owned ? 'EQUIP' : '🪙 ' + t.cost}
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      if(owned){
+        selectedThemeId = t.id;
+        renderShop();
+        renderBoard();
+      } else if(coins >= t.cost){
+        coins -= t.cost;
+        ownedThemes.push(t.id);
+        selectedThemeId = t.id;
+        sfxCoin();
+        renderShop();
+      }
+    });
+    list.appendChild(card);
+  });
+}
+
+function drawTilePreview(){
+  const box = document.getElementById('tile-preview');
+  box.innerHTML = '';
+  const vals = [2,8,32,128];
+  vals.forEach(v => {
+    const d = document.createElement('div');
+    d.className = 'pv-tile';
+    d.style.background = tileColor(v);
+    d.style.color = tileTextColor(v);
+    d.textContent = v;
+    box.appendChild(d);
+  });
+}
+drawTilePreview();
+
+/* ============================================================
+   SCOREBOARD
+============================================================ */
+function renderScores(){
+  const list = document.getElementById('scores-list');
+  list.innerHTML = '';
+  if(highScores.length === 0){
+    list.innerHTML = '<div class="empty-state">No runs yet — play once to set your first score.</div>';
+    return;
+  }
+  highScores.slice(0,8).forEach((entry, i) => {
+    const row = document.createElement('div');
+    row.className = 'score-row';
+    row.innerHTML = `
+      <div class="score-rank ${i===0?'top1':''}">#${i+1}</div>
+      <div class="score-info">
+        <div class="score-val">${entry.score}</div>
+        <div class="score-meta">Highest tile: ${entry.maxTile}</div>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+function submitScore(finalScore, maxTile){
+  highScores.push({ score: finalScore, maxTile });
+  highScores.sort((a,b) => b.score - a.score);
+  highScores = highScores.slice(0,8);
+}
+
+/* ============================================================
+   2048 GAME LOGIC
+============================================================ */
+const SIZE = 4;
+let grid, score, gameOver, won, wonAnnounced;
+const boardEl = document.getElementById('board');
+let cellSize = 0, cellGap = 8;
+
+function newGame(){
+  grid = Array.from({length:SIZE}, () => Array(SIZE).fill(0));
+  score = 0; gameOver = false; won = false; wonAnnounced = false;
+  addRandomTile(); addRandomTile();
+  gameScreen.classList.add('active');
+  overlay.classList.add('hidden');
+  updateScoreDisplay();
+  renderBoard(true);
+}
+
+function addRandomTile(){
+  const empties = [];
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(grid[r][c]===0) empties.push([r,c]);
+  if(empties.length === 0) return;
+  const [r,c] = empties[Math.floor(Math.random()*empties.length)];
+  grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+}
+
+function updateScoreDisplay(){
+  document.getElementById('cur-score').textContent = score;
+  bestScore = Math.max(bestScore, score);
+  document.getElementById('best-score').textContent = bestScore;
+}
+
+function cloneGrid(g){ return g.map(row => row.slice()); }
+function gridsEqual(a,b){
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(a[r][c]!==b[r][c]) return false;
+  return true;
+}
+
+function slideRowLeft(row){
+  const filtered = row.filter(v => v !== 0);
+  const merged = [];
+  let gained = 0;
+  let didMerge = false;
+  for(let i=0;i<filtered.length;i++){
+    if(i < filtered.length-1 && filtered[i] === filtered[i+1]){
+      const val = filtered[i]*2;
+      merged.push(val);
+      gained += val;
+      if(val === 2048 && !wonAnnounced){ won = true; }
+      i++;
+      didMerge = true;
+    } else {
+      merged.push(filtered[i]);
+    }
+  }
+  while(merged.length < SIZE) merged.push(0);
+  return { row: merged, gained, didMerge };
+}
+
+function rotateGridCW(g){
+  const res = Array.from({length:SIZE}, () => Array(SIZE).fill(0));
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) res[c][SIZE-1-r] = g[r][c];
+  return res;
+}
+
+function move(dir){
+  // dir: 'left','right','up','down'
+  let working = cloneGrid(grid);
+  let rotations = { left:0, up:1, right:2, down:3 }[dir];
+  for(let i=0;i<rotations;i++) working = rotateGridCW(working);
+
+  let totalGained = 0, anyMerge = false;
+  for(let r=0;r<SIZE;r++){
+    const { row, gained, didMerge } = slideRowLeft(working[r]);
+    working[r] = row;
+    totalGained += gained;
+    if(didMerge) anyMerge = true;
+  }
+
+  for(let i=0;i<(4-rotations)%4;i++) working = rotateGridCW(working);
+
+  if(!gridsEqual(working, grid)){
+    grid = working;
+    score += totalGained;
+    if(totalGained > 0) sfxMerge(Math.max(2,totalGained));
+    else sfxMove();
+    addRandomTile();
+    updateScoreDisplay();
+    renderBoard();
+    if(won && !wonAnnounced){
+      wonAnnounced = true;
+      sfxWin();
+    }
+    checkGameOver();
+  }
+}
+
+function canMove(){
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(grid[r][c]===0) return true;
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    const v = grid[r][c];
+    if(c<SIZE-1 && grid[r][c+1]===v) return true;
+    if(r<SIZE-1 && grid[r+1][c]===v) return true;
+  }
+  return false;
+}
+
+function maxTileValue(){
+  let m = 0;
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) m = Math.max(m, grid[r][c]);
+  return m;
+}
+
+function checkGameOver(){
+  if(!canMove()){
+    gameOver = true;
+    sfxLose();
+    setTimeout(() => endRun(), 400);
+  }
+}
+
+function endRun(){
+  const finalScore = score;
+  const maxTile = maxTileValue();
+  const earned = Math.floor(finalScore/50);
+  coins += earned;
+  submitScore(finalScore, maxTile);
+  document.getElementById('over-title').textContent = won ? 'YOU HIT 2048!' : 'NO MORE MOVES';
+  document.getElementById('over-score').textContent = finalScore;
+  document.getElementById('over-best').textContent = 'Best this session: ' + bestScore;
+  document.getElementById('over-coins').textContent = `+${earned} coins earned`;
+  refreshCoinDisplays();
+  gameScreen.classList.remove('active');
+  showScreen('screen-over');
+}
+
+/* ============================================================
+   RENDER BOARD
+============================================================ */
+let tileEls = {}; // key "r-c" -> element (for animation reuse, simplified: full redraw each time)
+
+function computeCellMetrics(){
+  const rect = boardEl.getBoundingClientRect();
+  const padding = 8;
+  const gap = 8;
+  cellSize = (rect.width - padding*2 - gap*(SIZE-1)) / SIZE;
+  cellGap = gap;
+  return { padding, gap };
+}
+
+function renderBoard(fresh){
+  boardEl.innerHTML = '';
+  const { padding, gap } = computeCellMetrics();
+
+  // background cells
+  for(let i=0;i<SIZE*SIZE;i++){
+    const bg = document.createElement('div');
+    bg.className = 'cell-bg';
+    boardEl.appendChild(bg);
+  }
+
+  // tiles absolutely positioned on top
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const val = grid[r][c];
+      if(val === 0) continue;
+      const tile = document.createElement('div');
+      tile.className = 'tile' + (fresh ? ' spawn' : '');
+      tile.style.width = cellSize + 'px';
+      tile.style.height = cellSize + 'px';
+      tile.style.left = (padding + c*(cellSize+gap)) + 'px';
+      tile.style.top = (padding + r*(cellSize+gap)) + 'px';
+      tile.style.background = tileColor(val);
+      tile.style.color = tileTextColor(val);
+      tile.style.fontSize = (val >= 1024 ? cellSize*0.28 : val >= 128 ? cellSize*0.32 : cellSize*0.38) + 'px';
+      tile.textContent = val;
+      boardEl.appendChild(tile);
+    }
+  }
+}
+
+/* ============================================================
+   INPUT
+============================================================ */
+window.addEventListener('keydown', (e) => {
+  if(!gameScreen.classList.contains('active') || gameOver) return;
+  const map = { arrowleft:'left', arrowright:'right', arrowup:'up', arrowdown:'down', a:'left', d:'right', w:'up', s:'down' };
+  const dir = map[e.key.toLowerCase()];
+  if(dir){ e.preventDefault(); move(dir); }
+});
+
+let touchStartX=0, touchStartY=0;
+boardEl.addEventListener('touchstart', (e) => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, {passive:true});
+boardEl.addEventListener('touchend', (e) => {
+  if(gameOver) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if(Math.max(Math.abs(dx),Math.abs(dy)) < 24) return;
+  if(Math.abs(dx) > Math.abs(dy)){ move(dx > 0 ? 'right' : 'left'); }
+  else { move(dy > 0 ? 'down' : 'up'); }
+}, {passive:true});
+
+document.getElementById('play-btn').onclick = () => { ensureAudio(); newGame(); };
+document.getElementById('retry-btn').onclick = () => { ensureAudio(); newGame(); };
+
+window.addEventListener('resize', () => { if(gameScreen.classList.contains('active')) renderBoard(); });
+
+refreshCoinDisplays();
+</script>
+</body>
+</html>
